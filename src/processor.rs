@@ -82,13 +82,48 @@ impl Processor {
         return Err(ProgramError::IncorrectProgramId);
         }
 
-        let sender_data = MailAccount::try_from_slice(&sender_account.data.borrow()[..]);
-        sender_data.sent.push(mail.clone());
-        sender_data.serialize(&mut &mut sender_account.data.borrow_mut()[..])?;
+        let offset: usize = 4;
 
-        receiver_data = MailAccount::try_from_slice(&receiver_account.data.borrow()[..])?;
+        let data_length = DataLength::try_from_slice(&sender_account.data.borrow()[..offset])?;
+
+        let mut sender_data;
+        if data_length.length > 0 {
+            let length = usize::try_from(data_length.length + u32::try_from(offset).unwrap()).unwrap();
+            sender_data = MailAccount::try_from_slice(&sender_account.data.borrow()[offset..length])?;
+        } else {
+            sender_data = MailAccount {
+            inbox: Vec::new(),
+            sent: Vec::new(),
+            };
+        }
+
+        sender_data.sent.push(mail.clone());
+        let data_length = DataLength {
+            length: u32::try_from(get_instance_packed_len(&sender_data)?).unwrap(),
+        };
+        data_length.serialize(&mut &mut sender_account.data.borrow_mut()[..offset])?;
+        sender_data.serialize(&mut &mut sender_account.data.borrow_mut()[offset..])?;
+
+        let data_length = DataLength::try_from_slice(&receiver_account.data.borrow()[..offset])?;
+
+        let mut receiver_data;
+        if data_length.length > 0 {
+            let length = usize::try_from(data_length.length + u32::try_from(offset).unwrap()).unwrap();
+            receiver_data = MailAccount::try_from_slice(&receiver_account.data.borrow()[offset..length])?;
+        } else {
+            receiver_data = MailAccount {
+            inbox: Vec::new(),
+            sent: Vec::new(),
+            }
+        }
         receiver_data.inbox.push(mail.clone());
-        receiver_data.serialize(&mut &mut receiver_account.data.borrow_mut()[..])?;
+
+        let data_length = DataLength {
+            length: u32::try_from(get_instance_packed_len(&receiver_data)?).unwrap(),
+        };
+        data_length.serialize(&mut &mut receiver_account.data.borrow_mut()[..offset])?;
+        receiver_data.serialize(&mut &mut receiver_account.data.borrow_mut()[offset..])?;
+        }        
         Ok(())
       }
 }
